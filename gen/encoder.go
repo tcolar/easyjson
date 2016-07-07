@@ -197,15 +197,15 @@ func (g *Generator) notEmptyCheck(t reflect.Type, v string) string {
 	}
 }
 
-func (g *Generator) genStructFieldEncoder(t reflect.Type, f reflect.StructField, hasMapper bool) error {
+func (g *Generator) genStructFieldEncoder(t reflect.Type, f reflect.StructField, mapperName string) error {
 	jsonName := g.namer.GetJSONFieldName(t, f)
 	tags := parseFieldTags(f)
 
 	if tags.omit {
 		return nil
 	}
-	if hasMapper {
-		fmt.Fprintf(g.out, "  jsonName = in.MappedName(\"%s\")\n", f.Name)
+	if len(mapperName) > 0 {
+		fmt.Fprintf(g.out, "  jsonName = in.%s.Name(\"%s\")\n", mapperName, f.Name)
 	} else {
 		fmt.Fprintf(g.out, "  jsonName = \"%s\"\n", jsonName)
 	}
@@ -213,7 +213,7 @@ func (g *Generator) genStructFieldEncoder(t reflect.Type, f reflect.StructField,
 	if !tags.omitEmpty && !g.omitEmpty || tags.noOmitEmpty {
 		fmt.Fprintln(g.out, "  if !first { out.RawByte(',') }")
 		fmt.Fprintln(g.out, "  first = false")
-		fmt.Fprintln(g.out, "    out.RawString(strconv.Quote(jsonName)+\":\")")
+		fmt.Fprintln(g.out, `    out.RawString("\""+jsonName+"\":")`)
 		err := g.genTypeEncoder(f.Type, "in."+f.Name, tags, 1)
 		fmt.Fprintln(g.out, "  }")
 		return err
@@ -221,7 +221,8 @@ func (g *Generator) genStructFieldEncoder(t reflect.Type, f reflect.StructField,
 
 	fmt.Fprintln(g.out, "  if", g.notEmptyCheck(f.Type, "in."+f.Name), "{")
 	fmt.Fprintln(g.out, "    if !first { out.RawByte(',') }")
-	fmt.Fprintln(g.out, "    out.RawString(strconv.Quote(jsonName)+\":\")")
+	fmt.Fprintln(g.out, "    first = false")
+	fmt.Fprintln(g.out, `    out.RawString("\""+jsonName+"\":")`)
 	if err := g.genTypeEncoder(f.Type, "in."+f.Name, tags, 2); err != nil {
 		return err
 	}
@@ -248,19 +249,25 @@ func (g *Generator) genStructEncoder(t reflect.Type) error {
 	if err != nil {
 		return fmt.Errorf("cannot generate encoder for %v: %v", t, err)
 	}
-	hasMapper := false
-	mapperType := reflect.TypeOf(&easyjson.JsonMapper{})
+	mapperName := ""
+	mapperType := reflect.TypeOf(&easyjson.JsonMapping{})
 	for i := 0; i != t.NumField(); i++ {
 		ft := t.Field(i).Type
 		if ft == mapperType {
-			hasMapper = true
+			mapperName = t.Field(i).Name
 			break
 		}
 	}
 	for _, f := range fs {
-		if err := g.genStructFieldEncoder(t, f, hasMapper); err != nil {
+		if err := g.genStructFieldEncoder(t, f, mapperName); err != nil {
 			return err
 		}
+	}
+	if len(mapperName) > 0 {
+		fmt.Fprintln(g.out, "  if !first {out.RawByte(',')}\nfirst = false")
+		fmt.Fprintf(g.out, "  for k, v := range in.%s.Added() {\n", mapperName)
+		fmt.Fprintln(g.out, `    out.RawString("\""+k+"\":"+v)`)
+		fmt.Fprintln(g.out, "  }")
 	}
 
 	fmt.Fprintln(g.out, "  out.RawByte('}')")
