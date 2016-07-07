@@ -2,8 +2,9 @@ package easyjson
 
 // JsonMapping allows hiding/renaming/adding Json fields during runtime encoding
 type JsonMapping struct {
-	mapped map[string]string
-	added  map[string]string
+	mapped    map[string]string
+	added     map[string]string
+	inclusive bool
 }
 
 // Mapping creates a new empty mapping
@@ -14,9 +15,22 @@ func Mapping() *JsonMapping {
 	}
 }
 
+// Only tells the encoder to only include the given fields (by name)
+// incompatible with Omit()
+func (j *JsonMapping) Only(fields ...string) *JsonMapping {
+	j.inclusive = true
+	for _, field := range fields {
+		j.mapped[field] = ""
+	}
+	return j
+}
+
 // Drop tells the encoder to omit the given field (by name)
-func (j *JsonMapping) Omit(field string) *JsonMapping {
-	j.mapped[field] = ""
+func (j *JsonMapping) Omit(fields ...string) *JsonMapping {
+	j.inclusive = false
+	for _, field := range fields {
+		j.mapped[field] = ""
+	}
 	return j
 }
 
@@ -34,19 +48,33 @@ func (j *JsonMapping) Add(name string, jsonVal string) *JsonMapping {
 }
 
 // Name returns the mapped name for a field
-// a returned value of empty string meand Omit the field
-func (j *JsonMapping) Name(field string) string {
+// a returned value of empty string means Omit the field
+func (j *JsonMapping) Name(field, jsonName string) string {
 	if j == nil {
-		return field
+		return jsonName
 	}
+	if !j.inclusive { // exclusive "omit()"
+		newName, found := j.mapped[field]
+		if !found {
+			return jsonName
+		}
+		return newName
+	}
+	// inclusive "only()"
 	newName, found := j.mapped[field]
-	if !found {
-		return field
+	if found {
+		if len(newName) > 0 {
+			return newName
+		}
+		return jsonName
 	}
-	return newName
+	return ""
 }
 
 // Added returns the added items
 func (j *JsonMapping) Added() map[string]string {
+	if j == nil {
+		return map[string]string{}
+	}
 	return j.added
 }

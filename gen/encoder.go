@@ -205,7 +205,7 @@ func (g *Generator) genStructFieldEncoder(t reflect.Type, f reflect.StructField,
 		return nil
 	}
 	if len(mapperName) > 0 {
-		fmt.Fprintf(g.out, "  jsonName = in.%s.Name(\"%s\")\n", mapperName, f.Name)
+		fmt.Fprintf(g.out, "  jsonName = in.%s.Name(\"%s\",\"%s\")\n", mapperName, f.Name, jsonName)
 	} else {
 		fmt.Fprintf(g.out, "  jsonName = \"%s\"\n", jsonName)
 	}
@@ -264,8 +264,8 @@ func (g *Generator) genStructEncoder(t reflect.Type) error {
 		}
 	}
 	if len(mapperName) > 0 {
-		fmt.Fprintln(g.out, "  if !first {out.RawByte(',')}\nfirst = false")
 		fmt.Fprintf(g.out, "  for k, v := range in.%s.Added() {\n", mapperName)
+		fmt.Fprintln(g.out, "  if !first {out.RawByte(',')}\nfirst = false")
 		fmt.Fprintln(g.out, `    out.RawString("\""+k+"\":"+v)`)
 		fmt.Fprintln(g.out, "  }")
 	}
