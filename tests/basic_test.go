@@ -15,10 +15,12 @@ type testType interface {
 	json.Unmarshaler
 }
 
-var testCases = []struct {
+type testCase struct {
 	Decoded testType
 	Encoded string
-}{
+}
+
+var testCases = []testCase{
 	{&primitiveTypesValue, primitiveTypesString},
 	{&namedPrimitiveTypesValue, namedPrimitiveTypesString},
 	{&structsValue, structsString},
@@ -35,15 +37,20 @@ var testCases = []struct {
 
 func TestMarshal(t *testing.T) {
 	for i, test := range testCases {
-		data, err := test.Decoded.MarshalJSON()
-		if err != nil {
-			t.Errorf("[%d, %T] MarshalJSON() error: %v", i, test.Decoded, err)
-		}
+		testMarshal(t, i, test)
+	}
+	testMarshal(t, len(testCases), testCase{&mappingValue, mappingString})
+}
 
-		got := string(data)
-		if got != test.Encoded {
-			t.Errorf("[%d, %T] MarshalJSON(): got \n%v\n\t\t want \n%v", i, test.Decoded, got, test.Encoded)
-		}
+func testMarshal(t *testing.T, i int, test testCase) {
+	data, err := test.Decoded.MarshalJSON()
+	if err != nil {
+		t.Errorf("[%d, %T] MarshalJSON() error: %v", i, test.Decoded, err)
+	}
+
+	got := string(data)
+	if got != test.Encoded {
+		t.Errorf("[%d, %T] MarshalJSON(): got \n%v\n\t\t want \n%v", i, test.Decoded, got, test.Encoded)
 	}
 }
 
