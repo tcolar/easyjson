@@ -59,6 +59,7 @@ func NewGenerator(filename string) *Generator {
 			pkgWriter:       "jwriter",
 			pkgLexer:        "jlexer",
 			"encoding/json": "json",
+			"strconv":       "strconv",
 		},
 		namer:         DefaultFieldNamer{},
 		marshallers:   make(map[reflect.Type]bool),

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 
 	"github.com/mailru/easyjson"
@@ -198,28 +197,35 @@ func (g *Generator) notEmptyCheck(t reflect.Type, v string) string {
 	}
 }
 
-func (g *Generator) genStructFieldEncoder(t reflect.Type, f reflect.StructField) error {
+func (g *Generator) genStructFieldEncoder(t reflect.Type, f reflect.StructField, hasMapper bool) error {
 	jsonName := g.namer.GetJSONFieldName(t, f)
 	tags := parseFieldTags(f)
 
 	if tags.omit {
 		return nil
 	}
+	if hasMapper {
+		fmt.Fprintf(g.out, "  jsonName = in.MappedName(\"%s\")\n", f.Name)
+	} else {
+		fmt.Fprintf(g.out, "  jsonName = \"%s\"\n", jsonName)
+	}
+	fmt.Fprintln(g.out, "  if len(jsonName) > 0 {")
 	if !tags.omitEmpty && !g.omitEmpty || tags.noOmitEmpty {
 		fmt.Fprintln(g.out, "  if !first { out.RawByte(',') }")
 		fmt.Fprintln(g.out, "  first = false")
-		fmt.Fprintf(g.out, "  out.RawString(%q)\n", strconv.Quote(jsonName)+":")
-		return g.genTypeEncoder(f.Type, "in."+f.Name, tags, 1)
+		fmt.Fprintln(g.out, "    out.RawString(strconv.Quote(jsonName)+\":\")")
+		err := g.genTypeEncoder(f.Type, "in."+f.Name, tags, 1)
+		fmt.Fprintln(g.out, "  }")
+		return err
 	}
 
 	fmt.Fprintln(g.out, "  if", g.notEmptyCheck(f.Type, "in."+f.Name), "{")
 	fmt.Fprintln(g.out, "    if !first { out.RawByte(',') }")
-	fmt.Fprintln(g.out, "    first = false")
-
-	fmt.Fprintf(g.out, "    out.RawString(%q)\n", strconv.Quote(jsonName)+":")
+	fmt.Fprintln(g.out, "    out.RawString(strconv.Quote(jsonName)+\":\")")
 	if err := g.genTypeEncoder(f.Type, "in."+f.Name, tags, 2); err != nil {
 		return err
 	}
+	fmt.Fprintln(g.out, "  }")
 	fmt.Fprintln(g.out, "  }")
 	return nil
 }
@@ -233,6 +239,7 @@ func (g *Generator) genStructEncoder(t reflect.Type) error {
 	typ := g.getType(t)
 
 	fmt.Fprintln(g.out, "func "+fname+"(out *jwriter.Writer, in "+typ+") {")
+	fmt.Fprintln(g.out, "  var jsonName string")
 	fmt.Fprintln(g.out, "  out.RawByte('{')")
 	fmt.Fprintln(g.out, "  first := true")
 	fmt.Fprintln(g.out, "  _ = first")
@@ -241,8 +248,17 @@ func (g *Generator) genStructEncoder(t reflect.Type) error {
 	if err != nil {
 		return fmt.Errorf("cannot generate encoder for %v: %v", t, err)
 	}
+	hasMapper := false
+	mapperType := reflect.TypeOf(&easyjson.JsonMapper{})
+	for i := 0; i != t.NumField(); i++ {
+		ft := t.Field(i).Type
+		if ft == mapperType {
+			hasMapper = true
+			break
+		}
+	}
 	for _, f := range fs {
-		if err := g.genStructFieldEncoder(t, f); err != nil {
+		if err := g.genStructFieldEncoder(t, f, hasMapper); err != nil {
 			return err
 		}
 	}
